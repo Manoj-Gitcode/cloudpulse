@@ -1,11 +1,17 @@
 /**
  * Cloud Resource Monitoring and Cost Dashboard - Main Application Script
+ * Integrated with Flask Backend API endpoints:
+ * - GET /api/resources
+ * - GET /api/metrics
+ * - GET /api/costs
+ * - GET /api/alerts
+ * - GET /health
  */
 
 // Application State
 const state = {
   resources: [],
-  metrics: { timestamps: [], cpu: [], memory: [] },
+  metrics: [],
   costs: { total: 0, budget: 0, by_service: [] },
   alerts: [],
   filters: {
@@ -16,7 +22,8 @@ const state = {
   charts: {
     cpuMemory: null,
     costBreakdown: null
-  }
+  },
+  refreshTimer: null
 };
 
 // DOM Elements Container
@@ -49,25 +56,48 @@ async function initDashboard() {
 
   setupEventListeners();
   await loadDashboardData();
+
+  // Auto-refresh telemetry every 30 seconds
+  if (!state.refreshTimer) {
+    state.refreshTimer = setInterval(() => {
+      loadDashboardData();
+    }, 30000);
+  }
 }
 
-// Load data from ApiService
+// Fetch helper with defensive error handling
+async function fetchEndpoint(endpoint, fallback) {
+  try {
+    const res = await fetch(endpoint);
+    if (!res.ok) {
+      console.warn(`API ${endpoint} responded with status: ${res.status}`);
+      return fallback;
+    }
+    const data = await res.json();
+    return data !== null && data !== undefined ? data : fallback;
+  } catch (err) {
+    console.warn(`Network or API error while fetching ${endpoint}:`, err);
+    return fallback;
+  }
+}
+
+// Load data directly from backend Flask API endpoints
 async function loadDashboardData() {
   try {
     showRefreshSpin(true);
 
-    // Fetch parallel API endpoints
+    // Call real Flask API endpoints concurrently
     const [resourcesData, metricsData, costsData, alertsData] = await Promise.all([
-      window.ApiService ? window.ApiService.getResources() : Promise.resolve([]),
-      window.ApiService ? window.ApiService.getMetrics() : Promise.resolve({ timestamps: [], cpu: [], memory: [] }),
-      window.ApiService ? window.ApiService.getCosts() : Promise.resolve({ total: 0, budget: 0, by_service: [] }),
-      window.ApiService ? window.ApiService.getAlerts() : Promise.resolve([])
+      fetchEndpoint('/api/resources', []),
+      fetchEndpoint('/api/metrics', []),
+      fetchEndpoint('/api/costs', { budget: 0, total: 0, by_service: [] }),
+      fetchEndpoint('/api/alerts', [])
     ]);
 
-    state.resources = resourcesData || [];
-    state.metrics = metricsData || { timestamps: [], cpu: [], memory: [] };
-    state.costs = costsData || { total: 0, budget: 0, by_service: [] };
-    state.alerts = alertsData || [];
+    state.resources = Array.isArray(resourcesData) ? resourcesData : [];
+    state.metrics = Array.isArray(metricsData) ? metricsData : [];
+    state.costs = (costsData && typeof costsData === 'object') ? costsData : { budget: 0, total: 0, by_service: [] };
+    state.alerts = Array.isArray(alertsData) ? alertsData : [];
 
     // Render components
     renderAlerts();
@@ -144,19 +174,22 @@ function renderAlerts() {
   if (!elements.alertBannerArea || typeof document === 'undefined') return;
   elements.alertBannerArea.innerHTML = '';
 
-  if (!state.alerts || state.alerts.length === 0) {
+  const alerts = Array.isArray(state.alerts) ? state.alerts : [];
+  if (alerts.length === 0) {
     elements.alertBannerArea.style.display = 'none';
     return;
   }
 
   elements.alertBannerArea.style.display = 'flex';
 
-  state.alerts.forEach((alert, index) => {
+  alerts.forEach((alert, index) => {
+    if (!alert) return;
     const banner = document.createElement('div');
-    const levelClass = alert.level === 'critical' ? 'critical' : 'warning';
-    banner.className = `alert-banner ${levelClass}`;
+    const severity = alert.severity ? String(alert.severity).toLowerCase() : 'warning';
+    const severityClass = severity === 'critical' ? 'critical' : 'warning';
+    banner.className = `alert-banner ${severityClass}`;
 
-    const iconPath = alert.level === 'critical' 
+    const iconPath = severity === 'critical'
       ? 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z'
       : 'M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z';
 
@@ -165,7 +198,7 @@ function renderAlerts() {
         <svg class="alert-icon" viewBox="0 0 24 24">
           <path d="${iconPath}"/>
         </svg>
-        <span>${escapeHtml(alert.message)}</span>
+        <span>${escapeHtml(alert.message || 'System alert')}</span>
       </div>
       <button class="alert-close" aria-label="Dismiss alert" data-index="${index}">&times;</button>
     `;
@@ -184,8 +217,8 @@ function renderAlerts() {
 // Render Metric KPI Cards
 function renderKpis() {
   // 1. Cost & Budget
-  const totalCost = state.costs.total || 0;
-  const budget = state.costs.budget || 1;
+  const totalCost = (state.costs && typeof state.costs.total === 'number') ? state.costs.total : 0;
+  const budget = (state.costs && typeof state.costs.budget === 'number' && state.costs.budget > 0) ? state.costs.budget : 1;
   const usedPercent = Math.min(100, Math.round((totalCost / budget) * 100));
 
   if (elements.totalCostEl) elements.totalCostEl.textContent = formatCurrency(totalCost);
@@ -201,10 +234,11 @@ function renderKpis() {
   }
 
   // 2. Resource Counts
-  const totalCount = state.resources.length;
-  const runningCount = state.resources.filter(r => r.status === 'running').length;
-  const warningCount = state.resources.filter(r => r.status === 'warning').length;
-  const stoppedCount = state.resources.filter(r => r.status === 'stopped').length;
+  const resources = Array.isArray(state.resources) ? state.resources : [];
+  const totalCount = resources.length;
+  const runningCount = resources.filter(r => r && r.status === 'running').length;
+  const warningCount = resources.filter(r => r && r.status === 'warning').length;
+  const stoppedCount = resources.filter(r => r && r.status === 'stopped').length;
 
   if (elements.totalResourcesEl) elements.totalResourcesEl.textContent = totalCount;
   if (elements.resourceBreakdownPills) {
@@ -216,7 +250,7 @@ function renderKpis() {
   }
 
   // 3. Avg CPU & Memory for active instances
-  const activeResources = state.resources.filter(r => r.status !== 'stopped');
+  const activeResources = resources.filter(r => r && r.status !== 'stopped');
   if (activeResources.length > 0) {
     const avgCpu = (activeResources.reduce((acc, curr) => acc + (curr.cpu || 0), 0) / activeResources.length).toFixed(1);
     const avgMem = (activeResources.reduce((acc, curr) => acc + (curr.memory || 0), 0) / activeResources.length).toFixed(1);
@@ -229,15 +263,17 @@ function renderKpis() {
 }
 
 // Render CPU & Memory Line Chart using Chart.js
+// Adapts backend metrics array: [{ time, cpu, memory }, ...]
 function renderCpuMemoryChart() {
   if (typeof document === 'undefined' || typeof Chart === 'undefined') return;
   const canvas = document.getElementById('cpuMemoryChart');
   if (!canvas) return;
 
   const ctx = canvas.getContext('2d');
-  const timestamps = state.metrics.timestamps || [];
-  const cpuData = state.metrics.cpu || [];
-  const memoryData = state.metrics.memory || [];
+  const metricsList = Array.isArray(state.metrics) ? state.metrics : [];
+  const timeLabels = metricsList.map(m => (m && m.time) ? String(m.time) : '');
+  const cpuData = metricsList.map(m => (m && typeof m.cpu === 'number') ? m.cpu : 0);
+  const memoryData = metricsList.map(m => (m && typeof m.memory === 'number') ? m.memory : 0);
 
   // Destroy existing chart instance on update
   if (state.charts.cpuMemory) {
@@ -256,7 +292,7 @@ function renderCpuMemoryChart() {
   state.charts.cpuMemory = new Chart(ctx, {
     type: 'line',
     data: {
-      labels: timestamps,
+      labels: timeLabels,
       datasets: [
         {
           label: 'CPU Utilization (%)',
@@ -338,15 +374,16 @@ function renderCpuMemoryChart() {
 }
 
 // Render Cost Breakdown Doughnut Chart using Chart.js
+// Adapts backend cost response: by_service: [{ service, cost }]
 function renderCostBreakdownChart() {
   if (typeof document === 'undefined' || typeof Chart === 'undefined') return;
   const canvas = document.getElementById('costBreakdownChart');
   if (!canvas) return;
 
   const ctx = canvas.getContext('2d');
-  const servicesData = state.costs.by_service || [];
-  const labels = servicesData.map(s => s.service);
-  const costs = servicesData.map(s => s.cost);
+  const servicesData = (state.costs && Array.isArray(state.costs.by_service)) ? state.costs.by_service : [];
+  const labels = servicesData.map(s => (s && s.service) ? String(s.service) : 'Other');
+  const costs = servicesData.map(s => (s && typeof s.cost === 'number') ? s.cost : 0);
 
   if (state.charts.costBreakdown) {
     state.charts.costBreakdown.destroy();
@@ -410,7 +447,8 @@ function renderCostBreakdownChart() {
 function populateRegionFilterOptions() {
   if (!elements.regionFilter || typeof document === 'undefined') return;
   const currentVal = elements.regionFilter.value;
-  const regions = [...new Set(state.resources.map(r => r.region))];
+  const resources = Array.isArray(state.resources) ? state.resources : [];
+  const regions = [...new Set(resources.map(r => r && r.region).filter(Boolean))];
 
   elements.regionFilter.innerHTML = '<option value="all">All Regions</option>';
   regions.forEach(reg => {
@@ -429,20 +467,28 @@ function populateRegionFilterOptions() {
 function renderResourceTable() {
   if (!elements.tableBody || typeof document === 'undefined') return;
 
-  const filtered = state.resources.filter(resource => {
-    const matchesSearch = !state.filters.search || 
-      resource.name.toLowerCase().includes(state.filters.search) ||
-      resource.id.toLowerCase().includes(state.filters.search) ||
-      resource.type.toLowerCase().includes(state.filters.search);
+  const resources = Array.isArray(state.resources) ? state.resources : [];
+  const search = state.filters.search || '';
+
+  const filtered = resources.filter(resource => {
+    if (!resource) return false;
+    const resId = String(resource.id ?? '').toLowerCase();
+    const resName = String(resource.name ?? '').toLowerCase();
+    const resType = String(resource.type ?? '').toLowerCase();
+
+    const matchesSearch = !search ||
+      resName.includes(search) ||
+      resId.includes(search) ||
+      resType.includes(search);
 
     const matchesStatus = state.filters.status === 'all' || resource.status === state.filters.status;
-    const matchesRegion = state.filters.region === 'all' || resource.region === state.filters.region;
+    const matchesRegion = state.filters.region === 'all' || !resource.region || resource.region === state.filters.region;
 
     return matchesSearch && matchesStatus && matchesRegion;
   });
 
   if (elements.tableCountBadge) {
-    elements.tableCountBadge.textContent = `${filtered.length} of ${state.resources.length} items`;
+    elements.tableCountBadge.textContent = `${filtered.length} of ${resources.length} items`;
   }
 
   elements.tableBody.innerHTML = '';
@@ -465,40 +511,45 @@ function renderResourceTable() {
 
   filtered.forEach(res => {
     const tr = document.createElement('tr');
-    
-    const cpuColor  = res.cpu    > 85 ? '#C0392B' : res.cpu    > 70 ? '#C48248' : '#2F4156';
-    const memColor  = res.memory > 85 ? '#C0392B' : res.memory > 70 ? '#C48248' : '#567C8D';
+
+    const cpuVal = typeof res.cpu === 'number' ? res.cpu : 0;
+    const memVal = typeof res.memory === 'number' ? res.memory : 0;
+    const costVal = typeof res.cost === 'number' ? res.cost : 0;
+    const statusVal = res.status || 'unknown';
+
+    const cpuColor  = cpuVal > 85 ? '#C0392B' : cpuVal > 70 ? '#C48248' : '#2F4156';
+    const memColor  = memVal > 85 ? '#C0392B' : memVal > 70 ? '#C48248' : '#567C8D';
 
     tr.innerHTML = `
       <td>
         <div class="resource-name-cell">
-          <span class="resource-name">${escapeHtml(res.name)}</span>
+          <span class="resource-name">${escapeHtml(res.name || 'Resource ' + res.id)}</span>
           <span class="resource-id">${escapeHtml(res.id)}</span>
         </div>
       </td>
-      <td>${escapeHtml(res.type)}</td>
-      <td>${escapeHtml(res.region)}</td>
+      <td>${escapeHtml(res.type || '—')}</td>
+      <td>${escapeHtml(res.region || '—')}</td>
       <td>
         <div class="metric-progress-cell">
           <div class="metric-bar-wrap">
-            <div class="metric-bar-fill" style="width: ${Math.min(100, res.cpu)}%; background-color: ${cpuColor}"></div>
+            <div class="metric-bar-fill" style="width: ${Math.min(100, Math.max(0, cpuVal))}%; background-color: ${cpuColor}"></div>
           </div>
-          <span class="metric-val">${res.cpu.toFixed(1)}%</span>
+          <span class="metric-val">${cpuVal.toFixed(1)}%</span>
         </div>
       </td>
       <td>
         <div class="metric-progress-cell">
           <div class="metric-bar-wrap">
-            <div class="metric-bar-fill" style="width: ${Math.min(100, res.memory)}%; background-color: ${memColor}"></div>
+            <div class="metric-bar-fill" style="width: ${Math.min(100, Math.max(0, memVal))}%; background-color: ${memColor}"></div>
           </div>
-          <span class="metric-val">${res.memory.toFixed(1)}%</span>
+          <span class="metric-val">${memVal.toFixed(1)}%</span>
         </div>
       </td>
-      <td><strong>${formatCurrency(res.cost_per_day)}</strong> / day</td>
+      <td><strong>${formatCurrency(costVal)}</strong></td>
       <td>
-        <span class="status-badge ${res.status}">
+        <span class="status-badge ${escapeHtml(statusVal)}">
           <span class="badge-dot"></span>
-          ${res.status}
+          ${escapeHtml(statusVal)}
         </span>
       </td>
     `;
@@ -512,7 +563,12 @@ function renderResourceTable() {
 
 // Open Resource Inspect Modal
 function openModal(resource) {
-  if (!elements.modalOverlay || !elements.modalBody || typeof document === 'undefined') return;
+  if (!elements.modalOverlay || !elements.modalBody || typeof document === 'undefined' || !resource) return;
+
+  const costVal = typeof resource.cost === 'number' ? resource.cost : 0;
+  const cpuVal = typeof resource.cpu === 'number' ? resource.cpu : 0;
+  const memVal = typeof resource.memory === 'number' ? resource.memory : 0;
+  const statusVal = resource.status || 'unknown';
 
   elements.modalBody.innerHTML = `
     <div class="detail-row">
@@ -521,40 +577,36 @@ function openModal(resource) {
     </div>
     <div class="detail-row">
       <span class="detail-label">Resource Name</span>
-      <span class="detail-value">${escapeHtml(resource.name)}</span>
+      <span class="detail-value">${escapeHtml(resource.name || 'Resource ' + resource.id)}</span>
     </div>
     <div class="detail-row">
       <span class="detail-label">Instance Type</span>
-      <span class="detail-value">${escapeHtml(resource.type)}</span>
+      <span class="detail-value">${escapeHtml(resource.type || '—')}</span>
     </div>
     <div class="detail-row">
       <span class="detail-label">Region</span>
-      <span class="detail-value">${escapeHtml(resource.region)}</span>
+      <span class="detail-value">${escapeHtml(resource.region || '—')}</span>
     </div>
     <div class="detail-row">
       <span class="detail-label">Status</span>
       <span class="detail-value">
-        <span class="status-badge ${resource.status}">
+        <span class="status-badge ${escapeHtml(statusVal)}">
           <span class="badge-dot"></span>
-          ${resource.status}
+          ${escapeHtml(statusVal)}
         </span>
       </span>
     </div>
     <div class="detail-row">
       <span class="detail-label">Current CPU Load</span>
-      <span class="detail-value">${resource.cpu}%</span>
+      <span class="detail-value">${cpuVal}%</span>
     </div>
     <div class="detail-row">
       <span class="detail-label">Current Memory Load</span>
-      <span class="detail-value">${resource.memory}%</span>
+      <span class="detail-value">${memVal}%</span>
     </div>
     <div class="detail-row">
-      <span class="detail-label">Daily Running Cost</span>
-      <span class="detail-value">${formatCurrency(resource.cost_per_day)} / day</span>
-    </div>
-    <div class="detail-row">
-      <span class="detail-label">Estimated Monthly Cost</span>
-      <span class="detail-value">${formatCurrency(resource.cost_per_day * 30)} / mo</span>
+      <span class="detail-label">Cost</span>
+      <span class="detail-value">${formatCurrency(costVal)}</span>
     </div>
   `;
 
@@ -569,11 +621,12 @@ function closeModal() {
 
 // Helpers
 function formatCurrency(val) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
+  const num = typeof val === 'number' && !isNaN(val) ? val : 0;
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(num);
 }
 
 function escapeHtml(str) {
-  if (!str) return '';
+  if (str === null || str === undefined) return '';
   return String(str)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
