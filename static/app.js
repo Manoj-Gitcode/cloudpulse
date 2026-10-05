@@ -193,10 +193,11 @@ function renderKpis() {
   if (elements.budgetProgressFill) {
     elements.budgetProgressFill.style.width = `${usedPercent}%`;
     if (usedPercent > 90) {
-      elements.budgetProgressFill.style.background = 'linear-gradient(90deg, #f59e0b, #ef4444)';
+      elements.budgetProgressFill.style.background = 'linear-gradient(90deg, #C48248 0%, #C0392B 100%)';
     } else {
-      elements.budgetProgressFill.style.background = 'linear-gradient(90deg, #3b82f6, #8b5cf6)';
+      elements.budgetProgressFill.style.background = 'linear-gradient(90deg, #567C8D 0%, #3D546F 50%, #2F4156 100%)';
     }
+    elements.budgetProgressFill.setAttribute('data-pct', `${usedPercent}%`);
   }
 
   // 2. Resource Counts
@@ -243,14 +244,14 @@ function renderCpuMemoryChart() {
     state.charts.cpuMemory.destroy();
   }
 
-  // Gradient Fills
+  // Gradient Fills — Navy & Teal
   const cpuGradient = ctx.createLinearGradient(0, 0, 0, 300);
-  cpuGradient.addColorStop(0, 'rgba(6, 182, 212, 0.35)');
-  cpuGradient.addColorStop(1, 'rgba(6, 182, 212, 0.0)');
+  cpuGradient.addColorStop(0, 'rgba(47, 65, 86, 0.40)');  // Navy (#2F4156)
+  cpuGradient.addColorStop(1, 'rgba(47, 65, 86, 0.02)');
 
   const memGradient = ctx.createLinearGradient(0, 0, 0, 300);
-  memGradient.addColorStop(0, 'rgba(139, 92, 246, 0.35)');
-  memGradient.addColorStop(1, 'rgba(139, 92, 246, 0.0)');
+  memGradient.addColorStop(0, 'rgba(86, 124, 141, 0.45)');  // Teal (#567C8D)
+  memGradient.addColorStop(1, 'rgba(86, 124, 141, 0.02)');
 
   state.charts.cpuMemory = new Chart(ctx, {
     type: 'line',
@@ -260,25 +261,29 @@ function renderCpuMemoryChart() {
         {
           label: 'CPU Utilization (%)',
           data: cpuData,
-          borderColor: '#06b6d4',
+          borderColor: '#2F4156',           // Navy
           backgroundColor: cpuGradient,
           borderWidth: 2.5,
           fill: true,
           tension: 0.35,
-          pointBackgroundColor: '#06b6d4',
-          pointRadius: 3,
+          pointBackgroundColor: '#2F4156',
+          pointBorderColor: '#FFFFFF',
+          pointBorderWidth: 1.5,
+          pointRadius: 3.5,
           pointHoverRadius: 6
         },
         {
           label: 'Memory Usage (%)',
           data: memoryData,
-          borderColor: '#8b5cf6',
+          borderColor: '#567C8D',           // Teal
           backgroundColor: memGradient,
           borderWidth: 2.5,
           fill: true,
           tension: 0.35,
-          pointBackgroundColor: '#8b5cf6',
-          pointRadius: 3,
+          pointBackgroundColor: '#567C8D',
+          pointBorderColor: '#FFFFFF',
+          pointBorderWidth: 1.5,
+          pointRadius: 3.5,
           pointHoverRadius: 6
         }
       ]
@@ -286,28 +291,27 @@ function renderCpuMemoryChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      interaction: {
-        mode: 'index',
-        intersect: false
-      },
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: {
           position: 'top',
           align: 'end',
           labels: {
-            color: '#9ca3af',
-            font: { family: 'inherit', size: 12 },
+            color: '#2F4156',
+            font: { family: "'Plus Jakarta Sans', sans-serif", size: 12, weight: '600' },
             usePointStyle: true,
             boxWidth: 8
           }
         },
         tooltip: {
-          backgroundColor: '#111827',
-          titleColor: '#f9fafb',
-          bodyColor: '#9ca3af',
-          borderColor: '#1f2937',
-          borderWidth: 1,
-          padding: 10,
+          backgroundColor: '#2F4156',
+          titleColor: '#FFFFFF',
+          bodyColor: '#C8D9E6',
+          borderColor: '#567C8D',
+          borderWidth: 1.5,
+          padding: 12,
+          boxPadding: 6,
+          usePointStyle: true,
           callbacks: {
             label: (context) => ` ${context.dataset.label}: ${context.parsed.y}%`
           }
@@ -315,16 +319,16 @@ function renderCpuMemoryChart() {
       },
       scales: {
         x: {
-          grid: { color: 'rgba(31, 41, 55, 0.5)' },
-          ticks: { color: '#6b7280', font: { size: 11 } }
+          grid: { color: 'rgba(200, 217, 230, 0.40)' },
+          ticks: { color: '#567C8D', font: { family: "'Plus Jakarta Sans', sans-serif", size: 11 } }
         },
         y: {
           min: 0,
           max: 100,
-          grid: { color: 'rgba(31, 41, 55, 0.5)' },
+          grid: { color: 'rgba(200, 217, 230, 0.40)' },
           ticks: {
-            color: '#6b7280',
-            font: { size: 11 },
+            color: '#567C8D',
+            font: { family: "'Plus Jakarta Sans', sans-serif", size: 11 },
             callback: (val) => `${val}%`
           }
         }
@@ -348,13 +352,14 @@ function renderCostBreakdownChart() {
     state.charts.costBreakdown.destroy();
   }
 
+  // Navy, Teal, Sky Blue, and Beige Harmonic Palette
   const colors = [
-    '#3b82f6', // EC2 - Blue
-    '#8b5cf6', // RDS - Purple
-    '#10b981', // S3 - Green
-    '#f59e0b', // EKS - Amber
-    '#06b6d4', // ElastiCache - Cyan
-    '#ec4899'  // Other - Pink
+    '#2F4156',  // EC2         — Navy
+    '#567C8D',  // RDS         — Teal
+    '#7EA0B0',  // S3          — Soft Teal
+    '#A4BED0',  // EKS         — Slate Sky
+    '#C8D9E6',  // ElastiCache — Sky Blue
+    '#D5C9BE'   // Other       — Warm Beige
   ];
 
   state.charts.costBreakdown = new Chart(ctx, {
@@ -364,9 +369,9 @@ function renderCostBreakdownChart() {
       datasets: [{
         data: costs,
         backgroundColor: colors.slice(0, labels.length),
-        borderColor: '#111827',
+        borderColor: '#FFFFFF',
         borderWidth: 3,
-        hoverOffset: 6
+        hoverOffset: 8
       }]
     },
     options: {
@@ -376,25 +381,27 @@ function renderCostBreakdownChart() {
         legend: {
           position: 'bottom',
           labels: {
-            color: '#9ca3af',
-            font: { family: 'inherit', size: 11 },
+            color: '#2F4156',
+            font: { family: "'Plus Jakarta Sans', sans-serif", size: 11, weight: '500' },
             usePointStyle: true,
             padding: 14
           }
         },
         tooltip: {
-          backgroundColor: '#111827',
-          titleColor: '#f9fafb',
-          bodyColor: '#9ca3af',
-          borderColor: '#1f2937',
-          borderWidth: 1,
-          padding: 10,
+          backgroundColor: '#2F4156',
+          titleColor: '#FFFFFF',
+          bodyColor: '#C8D9E6',
+          borderColor: '#567C8D',
+          borderWidth: 1.5,
+          padding: 12,
+          boxPadding: 6,
+          usePointStyle: true,
           callbacks: {
             label: (context) => ` ${context.label}: ${formatCurrency(context.parsed)}`
           }
         }
       },
-      cutout: '70%'
+      cutout: '68%'
     }
   });
 }
@@ -459,8 +466,8 @@ function renderResourceTable() {
   filtered.forEach(res => {
     const tr = document.createElement('tr');
     
-    const cpuColor = res.cpu > 85 ? '#ef4444' : res.cpu > 70 ? '#f59e0b' : '#3b82f6';
-    const memColor = res.memory > 85 ? '#ef4444' : res.memory > 70 ? '#f59e0b' : '#8b5cf6';
+    const cpuColor  = res.cpu    > 85 ? '#C0392B' : res.cpu    > 70 ? '#C48248' : '#2F4156';
+    const memColor  = res.memory > 85 ? '#C0392B' : res.memory > 70 ? '#C48248' : '#567C8D';
 
     tr.innerHTML = `
       <td>
