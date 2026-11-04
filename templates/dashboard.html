@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CloudPulse — Cloud Resource & Cost Intelligence</title>
+
+  <!-- Google Fonts: Editorial Serif + Modern Clean Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500;1,600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/static/style.css" id="dashStyles">
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script>
+    // Set Navy & Teal Chart.js defaults
+    if (typeof Chart !== 'undefined') {
+      Chart.defaults.color = '#2F4156';
+      Chart.defaults.borderColor = 'rgba(200, 217, 230, 0.40)';
+      Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
+    }
+  </script>
+
+  <!-- Application Scripts (Resilient to both HTTP and direct file:// viewing) -->
+  <script>
+    (function() {
+      const isFile = window.location.protocol === 'file:';
+      if (isFile) {
+        const link = document.getElementById('dashStyles');
+        if (link) link.href = '../static/style.css';
+      }
+      function loadScript(src) {
+        document.write('<script src="' + (isFile ? ('../' + src) : ('/' + src)) + '"><\/script>');
+      }
+      loadScript('static/mockData.js');
+      loadScript('static/api.js');
+      loadScript('static/app.js');
+    })();
+  </script>
+</head>
+<body>
+
+  <!-- Atmospheric Background Ambient Accents -->
+  <div class="sky-ambient-bg" aria-hidden="true">
+    <div class="ambient-orb ambient-orb-1"></div>
+    <div class="ambient-orb ambient-orb-2"></div>
+    <div class="ambient-orb ambient-orb-3"></div>
+  </div>
+
+  <div class="dashboard-container">
+
+    <!-- Top Navigation Bar -->
+    <header class="navbar">
+      <div class="brand-section">
+        <div class="brand-icon" title="CloudPulse Infrastructure">
+          <svg viewBox="0 0 28 28" fill="none">
+            <!-- Modern cloud structure -->
+            <path d="M21.5 14C21 11.2 18.5 9 15.5 9C14.7 9 14 9.2 13.3 9.6C12.3 7.5 10.2 6 7.7 6C4 6 1 9 1 12.7C1 13.2 1.1 13.6 1.2 14C0.5 14.6 0 15.5 0 16.5C0 18.4 1.6 20 3.5 20H21.5C23.4 20 25 18.4 25 16.5C25 15.1 24.2 13.9 23 13.4" fill="#FFFFFF" stroke="#567C8D" stroke-width="1.8" stroke-linejoin="round"/>
+            <!-- Teal & Sky pulse wave -->
+            <path d="M6 15.5H9.5L12 11.5L14.5 18.5L17 15.5H20.5" stroke="#2F4156" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title-wrap">
+            <h1 class="brand-title">CloudPulse</h1>
+          </div>
+          <div class="brand-subtitle">
+            <span>Infrastructure &amp; Expenditure Intelligence</span>
+            <div class="system-status-chip">
+              <span class="status-dot"></span>
+              Systems Nominal
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="nav-actions">
+        <div class="nav-meta">
+          <div class="mock-badge">
+            <span class="badge-dot"></span>
+            Mock API Active
+          </div>
+          <div class="nav-meta-sep"></div>
+          <span id="lastUpdatedText" class="last-updated-text">Last updated: Just now</span>
+        </div>
+
+        <button id="btnRefresh" class="btn-refresh" title="Refresh live telemetry">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3L21.5 8M22 12.5a10 10 0 0 1-18.8 4.2L2.5 16"/>
+          </svg>
+          Refresh
+        </button>
+      </div>
+    </header>
+
+    <!-- Top Alert Banner Area -->
+    <section id="alertBannerArea" class="alert-banner-area"></section>
+
+    <!-- Section Ribbon -->
+    <div class="section-label">
+      <span class="section-label-icon">✦</span>
+      Infrastructure Pulse
+    </div>
+
+    <!-- KPI Metric Summary Grid -->
+    <section class="kpi-grid">
+      <!-- KPI 1: Cost & Budget (Hero Card) -->
+      <div class="kpi-card kpi-hero-card">
+        <div class="kpi-header">
+          <div>
+            <span class="kpi-title">Monthly Cost &amp; Budget</span>
+            <div class="kpi-pill-tag">EXPENDITURE</div>
+          </div>
+          <div class="kpi-icon-wrap hero-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+          </div>
+        </div>
+
+        <div class="kpi-hero-body">
+          <div>
+            <div id="totalCostVal" class="kpi-value hero-cost-value">$0.00</div>
+            <div id="budgetTextVal" class="kpi-subtext">of $0.00 limit (0% used)</div>
+          </div>
+
+          <!-- Arc Meter -->
+          <div class="budget-arc-container">
+            <svg class="budget-arc-svg" viewBox="0 0 60 60">
+              <circle class="budget-arc-bg" cx="30" cy="30" r="24"/>
+              <circle id="budgetArcFill" class="budget-arc-fill" cx="30" cy="30" r="24"/>
+            </svg>
+            <div id="budgetArcPct" class="budget-arc-pct">0%</div>
+          </div>
+        </div>
+
+        <!-- Budget Progress Bar -->
+        <div class="budget-progress-bar">
+          <div id="budgetProgressFill" class="budget-progress-fill" style="width: 0%;"></div>
+        </div>
+      </div>
+
+      <!-- KPI 2: Total Active Resources -->
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <div>
+            <span class="kpi-title">Cloud Resources</span>
+            <div class="kpi-pill-tag">INVENTORY</div>
+          </div>
+          <div class="kpi-icon-wrap teal-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
+              <rect x="2" y="14" width="20" height="8" rx="2" ry="2"/>
+              <line x1="6" y1="6" x2="6.01" y2="6"/>
+              <line x1="6" y1="18" x2="6.01" y2="18"/>
+            </svg>
+          </div>
+        </div>
+        <div id="totalResourcesVal" class="kpi-value">0</div>
+        <div id="resourceBreakdownPills" class="resource-counts"></div>
+      </div>
+
+      <!-- KPI 3: Avg CPU Load -->
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <div>
+            <span class="kpi-title">Avg CPU Utilization</span>
+            <div class="kpi-pill-tag">COMPUTE</div>
+          </div>
+          <div class="kpi-icon-wrap navy-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="4" y="4" width="16" height="16" rx="2"/>
+              <rect x="9" y="9" width="6" height="6"/>
+              <line x1="9" y1="1" x2="9" y2="4"/>
+              <line x1="15" y1="1" x2="15" y2="4"/>
+              <line x1="9" y1="20" x2="9" y2="23"/>
+              <line x1="15" y1="20" x2="15" y2="23"/>
+              <line x1="20" y1="9" x2="23" y2="9"/>
+              <line x1="20" y1="14" x2="23" y2="14"/>
+              <line x1="1" y1="9" x2="4" y2="9"/>
+              <line x1="1" y1="14" x2="4" y2="14"/>
+            </svg>
+          </div>
+        </div>
+        <div id="avgCpuVal" class="kpi-value">0%</div>
+        <div class="kpi-subtext">Aggregate across running compute nodes</div>
+      </div>
+
+      <!-- KPI 4: Avg Memory Usage -->
+      <div class="kpi-card">
+        <div class="kpi-header">
+          <div>
+            <span class="kpi-title">Avg Memory Usage</span>
+            <div class="kpi-pill-tag">MEMORY</div>
+          </div>
+          <div class="kpi-icon-wrap sky-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+          </div>
+        </div>
+        <div id="avgMemoryVal" class="kpi-value">0%</div>
+        <div class="kpi-subtext">Aggregate across provisioned workloads</div>
+      </div>
+    </section>
+
+    <!-- Section Ribbon -->
+    <div class="section-label">
+      <span class="section-label-icon">✦</span>
+      Data Visualization
+    </div>
+
+    <!-- Interactive Charts Section -->
+    <section class="charts-grid">
+      <!-- CPU and Memory Line Chart -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <h2 class="chart-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+              </svg>
+              CPU &amp; Memory Metrics (12-Hour History)
+            </h2>
+            <p class="chart-subtitle">Real-time aggregate resource utilization metrics over time</p>
+          </div>
+          <div class="chart-tag-badge">Live Telemetry</div>
+        </div>
+        <div class="chart-container">
+          <canvas id="cpuMemoryChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Cost Breakdown Chart -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div>
+            <h2 class="chart-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21.21 15.89A10 10 0 1 1 8 2.83"/>
+                <path d="M22 12A10 10 0 0 0 12 2v10z"/>
+              </svg>
+              Cost Breakdown by Service
+            </h2>
+            <p class="chart-subtitle">Monthly expenditure allocation per cloud service</p>
+          </div>
+          <div class="chart-tag-badge">By Service</div>
+        </div>
+        <div class="chart-container">
+          <canvas id="costBreakdownChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section Ribbon -->
+    <div class="section-label">
+      <span class="section-label-icon">✦</span>
+      Resource Inventory
+    </div>
+
+    <!-- Resource Inventory Table Section -->
+    <section class="table-card">
+      <div class="table-header-controls">
+        <div class="table-title-wrap">
+          <h2 class="table-title">Cloud Resource Inventory</h2>
+          <span id="tableCountBadge" class="table-count-badge">0 items</span>
+        </div>
+
+        <div class="filter-controls">
+          <!-- Search Input -->
+          <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="searchInput" class="search-input" placeholder="Search by name, ID, or type...">
+          </div>
+
+          <!-- Status Filter (Custom Aesthetic Dropdown) -->
+          <div class="custom-select-wrapper" id="statusFilterWrapper">
+            <button type="button" class="custom-select-trigger" id="statusFilterTrigger" aria-haspopup="listbox" aria-expanded="false">
+              <span class="custom-select-label">All Statuses</span>
+              <svg class="custom-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="custom-select-menu" id="statusFilterMenu" role="listbox">
+              <div class="custom-select-option selected" data-value="all"><span class="custom-select-option-dot"></span><span>All Statuses</span></div>
+              <div class="custom-select-option" data-value="running"><span class="custom-select-option-dot running"></span><span>Running</span></div>
+              <div class="custom-select-option" data-value="warning"><span class="custom-select-option-dot warning"></span><span>Warning</span></div>
+              <div class="custom-select-option" data-value="stopped"><span class="custom-select-option-dot stopped"></span><span>Stopped</span></div>
+            </div>
+            <!-- Native select preserved for app.js -->
+            <select id="statusFilter" class="filter-select sr-only">
+              <option value="all">All Statuses</option>
+              <option value="running">Running</option>
+              <option value="warning">Warning</option>
+              <option value="stopped">Stopped</option>
+            </select>
+          </div>
+
+          <!-- Region Filter (Custom Aesthetic Dropdown) -->
+          <div class="custom-select-wrapper" id="regionFilterWrapper">
+            <button type="button" class="custom-select-trigger" id="regionFilterTrigger" aria-haspopup="listbox" aria-expanded="false">
+              <span class="custom-select-label">All Regions</span>
+              <svg class="custom-select-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            <div class="custom-select-menu" id="regionFilterMenu" role="listbox">
+              <div class="custom-select-option selected" data-value="all"><span class="custom-select-option-dot"></span><span>All Regions</span></div>
+            </div>
+            <!-- Native select preserved for app.js -->
+            <select id="regionFilter" class="filter-select sr-only">
+              <option value="all">All Regions</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="resource-table">
+          <thead>
+            <tr>
+              <th>Resource Name &amp; ID</th>
+              <th>Type</th>
+              <th>Region</th>
+              <th>CPU Load</th>
+              <th>Memory Usage</th>
+              <th>Cost / Day</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="resourceTableBody">
+            <!-- Dynamic Table Rows Rendered via JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="dashboard-footer">
+      <div class="footer-content">
+        <p class="footer-copy">CloudPulse Infrastructure Monitoring &bull; Real-Time Telemetry &amp; Expenditure Intelligence</p>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Resource Detail Modal -->
+  <div id="modalOverlay" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title-wrap">
+          <div class="modal-icon-badge">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+            </svg>
+          </div>
+          <h3 class="modal-title">Cloud Resource Details</h3>
+        </div>
+        <button id="modalCloseBtn" class="modal-close-btn" title="Close modal">&times;</button>
+      </div>
+      <div id="modalBody" class="modal-body">
+        <!-- Resource Details populated via JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Budget Arc Sync Script -->
+  <script>
+    (function() {
+      const CIRCUMFERENCE = 2 * Math.PI * 24; // r=24
+
+      function updateBudgetArc(pct) {
+        const arc = document.getElementById('budgetArcFill');
+        const label = document.getElementById('budgetArcPct');
+        if (!arc || !label) return;
+        const offset = CIRCUMFERENCE * (1 - Math.min(100, Math.max(0, pct)) / 100);
+        arc.style.strokeDashoffset = offset;
+        arc.style.strokeDasharray = CIRCUMFERENCE;
+        label.textContent = Math.round(pct) + '%';
+
+        if (pct >= 90) {
+          arc.style.stroke = '#C0392B'; // Alert Crimson
+        } else if (pct >= 75) {
+          arc.style.stroke = '#C48248'; // Warm Ochre
+        } else {
+          arc.style.stroke = '#567C8D'; // Teal
+        }
+      }
+
+      function checkAndObserve() {
+        const fill = document.getElementById('budgetProgressFill');
+        if (!fill) return;
+
+        const mo = new MutationObserver(function() {
+          const w = parseFloat(fill.style.width) || 0;
+          updateBudgetArc(w);
+        });
+        mo.observe(fill, { attributes: true, attributeFilter: ['style'] });
+
+        const initial = parseFloat(fill.style.width) || 0;
+        if (initial > 0) updateBudgetArc(initial);
+      }
+
+      document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(checkAndObserve, 80);
+        setTimeout(checkAndObserve, 400);
+        setTimeout(checkAndObserve, 1200);
+      });
+    })();
+  </script>
+
+  <!-- Custom Dropdown Controller Script -->
+  <script>
+    (function initCustomDropdowns() {
+      function setupDropdown(wrapperId, selectId, triggerId, menuId) {
+        const wrapper = document.getElementById(wrapperId);
+        const select = document.getElementById(selectId);
+        const trigger = document.getElementById(triggerId);
+        const menu = document.getElementById(menuId);
+        if (!wrapper || !select || !trigger || !menu) return;
+
+        const label = trigger.querySelector('.custom-select-label');
+
+        function rebuildMenu() {
+          menu.innerHTML = '';
+          const options = Array.from(select.options);
+          options.forEach(opt => {
+            const item = document.createElement('div');
+            item.className = 'custom-select-option' + (opt.value === select.value ? ' selected' : '');
+            item.setAttribute('data-value', opt.value);
+
+            let dotClass = '';
+            if (opt.value === 'running') dotClass = ' running';
+            else if (opt.value === 'warning') dotClass = ' warning';
+            else if (opt.value === 'stopped') dotClass = ' stopped';
+
+            item.innerHTML = `<span class="custom-select-option-dot${dotClass}"></span><span>${opt.textContent}</span>`;
+
+            item.addEventListener('click', (e) => {
+              e.stopPropagation();
+              select.value = opt.value;
+              if (label) label.textContent = opt.textContent;
+              wrapper.classList.remove('open');
+              trigger.setAttribute('aria-expanded', 'false');
+              rebuildMenu();
+              // Trigger change event on native select for app.js
+              select.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            menu.appendChild(item);
+          });
+
+          // Sync label with selected option
+          const selectedOpt = select.options[select.selectedIndex];
+          if (selectedOpt && label) {
+            label.textContent = selectedOpt.textContent;
+          }
+        }
+
+        // Toggle open/close
+        trigger.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const isOpen = wrapper.classList.contains('open');
+          document.querySelectorAll('.custom-select-wrapper.open').forEach(w => {
+            if (w !== wrapper) {
+              w.classList.remove('open');
+              const t = w.querySelector('.custom-select-trigger');
+              if (t) t.setAttribute('aria-expanded', 'false');
+            }
+          });
+          wrapper.classList.toggle('open', !isOpen);
+          trigger.setAttribute('aria-expanded', !isOpen ? 'true' : 'false');
+        });
+
+        // Watch native select for programmatic changes (e.g. populateRegionFilterOptions)
+        const observer = new MutationObserver(() => {
+          rebuildMenu();
+        });
+        observer.observe(select, { childList: true, subtree: true, attributes: true });
+
+        select.addEventListener('change', () => {
+          rebuildMenu();
+        });
+
+        rebuildMenu();
+      }
+
+      // Close dropdowns on outside click or Escape key
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.custom-select-wrapper')) {
+          document.querySelectorAll('.custom-select-wrapper.open').forEach(w => {
+            w.classList.remove('open');
+            const t = w.querySelector('.custom-select-trigger');
+            if (t) t.setAttribute('aria-expanded', 'false');
+          });
+        }
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          document.querySelectorAll('.custom-select-wrapper.open').forEach(w => {
+            w.classList.remove('open');
+            const t = w.querySelector('.custom-select-trigger');
+            if (t) t.setAttribute('aria-expanded', 'false');
+          });
+        }
+      });
+
+      function init() {
+        setupDropdown('statusFilterWrapper', 'statusFilter', 'statusFilterTrigger', 'statusFilterMenu');
+        setupDropdown('regionFilterWrapper', 'regionFilter', 'regionFilterTrigger', 'regionFilterMenu');
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
+
+</body>
+</html>
