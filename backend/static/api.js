@@ -8,7 +8,7 @@
  * - GET /api/alerts
  */
 
-const USE_MOCK_API = true; // Set to false when connecting to the real backend
+const USE_MOCK_API = false; // Set to false when connecting to the real backend
 
 const ApiService = {
   /**

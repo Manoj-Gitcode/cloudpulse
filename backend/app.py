@@ -1,4 +1,4 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, render_template
 import random
 import os
 
@@ -134,7 +134,9 @@ def alerts():
 
     return jsonify(alert_list)
 
-
+@app.route("/")
+def index():
+    return render_template("dashboard.html")
 @app.route("/health")
 def health():
     return jsonify({
@@ -148,5 +150,5 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=port,
-        debug=True
+        debug=False
     )
