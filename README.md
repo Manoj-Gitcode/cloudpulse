@@ -125,6 +125,7 @@ The app is deployed on Render from the `main` branch using the Dockerfile. Every
 Note: Render's free tier sleeps after inactivity, so the first load may take about 30 seconds.
 
 ---
+Jenkins CI enabled.
 
 ## Tech stack
 
